@@ -14,7 +14,7 @@ import "./tasks/FHECounter";
 
 // Run 'npx hardhat vars setup' to see the list of variables that need to be set
 
-const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test junk");
+const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test test junk");
 const INFURA_API_KEY: string = vars.get("INFURA_API_KEY", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
 
 const config: HardhatUserConfig = {
@@ -39,7 +39,7 @@ const config: HardhatUserConfig = {
       },
       chainId: 31337,
     },
-    anvil: {
+    localhost: {
       accounts: {
         mnemonic: MNEMONIC,
         path: "m/44'/60'/0'/0/",
@@ -65,7 +65,7 @@ const config: HardhatUserConfig = {
     tests: "./test",
   },
   solidity: {
-    version: "0.8.24",
+    version: "0.8.27",
     settings: {
       metadata: {
         // Not including the metadata hash

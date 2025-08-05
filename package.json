@@ -24,9 +24,12 @@
     "hardhat"
   ],
   "dependencies": {
+    "@fhevm/solidity": "^0.7.0",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@openzeppelin/confidential-contracts": "^0.2.0-rc.1",
     "@openzeppelin/contracts": "^5.4.0",
     "@zama-fhe/oracle-solidity": "^0.1.0",
+    "dotenv": "^17.2.1",
     "encrypted-types": "^0.0.4",
     "fhevm": "^0.6.2",
     "fhevm-contracts": "^0.2.4"

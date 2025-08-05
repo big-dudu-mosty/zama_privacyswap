@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # FHEVM Hardhat Template
 
 A Hardhat-based template for developing Fully Homomorphic Encryption (FHE) enabled Solidity smart contracts using the
@@ -108,3 +109,6 @@ This project is licensed under the BSD-3-Clause-Clear License. See the [LICENSE]
 ---
 
 **Built with ❤️ by the Zama team**
+=======
+# zama_privacyswap
+>>>>>>> 6d81fbef3112cae117c98437471ed18e6437f599

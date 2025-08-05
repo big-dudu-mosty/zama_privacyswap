@@ -64,6 +64,8 @@ describe("FHESwap", function () {
   let tokenBAddress: string;
   let fHeSwap: FHESwap;
   let fHeSwapAddress: string;
+  let initialReserveAmountA: bigint;
+  let initialReserveAmountB: bigint;
 
   // 在所有测试用例执行前执行一次的钩子函数
   before(async function () {
@@ -116,17 +118,18 @@ describe("FHESwap", function () {
   it("should allow owner to mint initial liquidity", async function () {
     console.log("--- 测试: 所有者铸造初始流动性 ---");
     const owner = signers.deployer; // 定义所有者为 deployer 账户
-    const initialReserveAmount = 1000; // 初始流动性金额
-    console.log(`初始储备金额: ${initialReserveAmount}`);
+    initialReserveAmountA = ethersjs.parseUnits("1000", 6); // 初始流动性金额
+    initialReserveAmountB = ethersjs.parseUnits("300", 6); // 初始流动性金额
+    console.log(`初始储备金额 TokenA: ${ethersjs.formatUnits(initialReserveAmountA, 6)}, TokenB: ${ethersjs.formatUnits(initialReserveAmountB, 6)}`);
 
     // 1. 所有者首先铸造 TokenA 和 TokenB 给自己 (用于提供流动性)
     console.log("1. Owner mints tokens to themselves:");
     // 创建加密输入，目标合约为 TokenA，发起人为 owner，值为 initialReserveAmount (euint64 类型)
-    const encryptedMintA = await fhevm.createEncryptedInput(tokenAAddress, owner.address).add64(initialReserveAmount).encrypt();
+    const encryptedMintA = await fhevm.createEncryptedInput(tokenAAddress, owner.address).add64(initialReserveAmountA).encrypt();
     console.log(`创建加密输入 (TokenA): Handle=${ethersjs.hexlify(encryptedMintA.handles[0])}, Proof=${ethersjs.hexlify(encryptedMintA.inputProof)}`);
     // owner 调用 TokenA 合约的 mint 函数，将加密的 TokenA 铸造给 owner 自己
     await tokenA.connect(owner).mint(owner.address, encryptedMintA.handles[0], encryptedMintA.inputProof);
-    console.log(`Owner 铸造 ${initialReserveAmount} TokenA 给自己.`);
+    console.log(`Owner 铸造 ${ethersjs.formatUnits(initialReserveAmountA, 6)} TokenA 给自己.`);
 
     // 获取 owner 在 TokenA 中的加密余额句柄
     const ownerTokenAEncryptedBalance = await tokenA.confidentialBalanceOf(owner.address);
@@ -142,14 +145,14 @@ describe("FHESwap", function () {
       tokenAAddress,
       owner
     );
-    console.log(`诊断: Owner 的 TokenA 余额 (解密后): ${decryptedOwnerTokenA}`);
+    console.log(`诊断: Owner 的 TokenA 余额 (解密后): ${ethersjs.formatUnits(decryptedOwnerTokenA, 6)}`);
 
     // 创建加密输入，目标合约为 TokenB，发起人为 owner，值为 initialReserveAmount (euint64 类型)
-    const encryptedMintB = await fhevm.createEncryptedInput(tokenBAddress, owner.address).add64(initialReserveAmount).encrypt();
+    const encryptedMintB = await fhevm.createEncryptedInput(tokenBAddress, owner.address).add64(initialReserveAmountB).encrypt();
     console.log(`创建加密输入 (TokenB): Handle=${ethersjs.hexlify(encryptedMintB.handles[0])}, Proof=${ethersjs.hexlify(encryptedMintB.inputProof)}`);
     // owner 调用 TokenB 合约的 mint 函数，将加密的 TokenB 铸造给 owner 自己
     await tokenB.connect(owner).mint(owner.address, encryptedMintB.handles[0], encryptedMintB.inputProof);
-    console.log(`Owner 铸造 ${initialReserveAmount} TokenB 给自己.`);
+    console.log(`Owner 铸造 ${ethersjs.formatUnits(initialReserveAmountB, 6)} TokenB 给自己.`);
 
     // 获取 owner 在 TokenB 中的加密余额句柄
     const ownerTokenBEncryptedBalance = await tokenB.confidentialBalanceOf(owner.address);
@@ -173,11 +176,11 @@ describe("FHESwap", function () {
     console.log("3. Owner provides liquidity to FHESwap:");
     // 创建加密输入，目标合约为 FHESwap，发起人为 owner，值为 initialReserveAmount (euint64 类型)
     // 注意：这里的 target contract 必须是 fHeSwapAddress，因为这些加密输入是为 FHESwap 的 mint 函数准备的
-    const encryptedAmount0 = await fhevm.createEncryptedInput(fHeSwapAddress, owner.address).add64(initialReserveAmount).encrypt();
+    const encryptedAmount0 = await fhevm.createEncryptedInput(fHeSwapAddress, owner.address).add64(initialReserveAmountA).encrypt();
     console.log(`创建加密输入 (FHESwap mint TokenA): Handle=${ethersjs.hexlify(encryptedAmount0.handles[0])}, Proof=${ethersjs.hexlify(encryptedAmount0.inputProof)}`);
-    const encryptedAmount1 = await fhevm.createEncryptedInput(fHeSwapAddress, owner.address).add64(initialReserveAmount).encrypt();
+    const encryptedAmount1 = await fhevm.createEncryptedInput(fHeSwapAddress, owner.address).add64(initialReserveAmountB).encrypt();
     console.log(`创建加密输入 (FHESwap mint TokenB): Handle=${ethersjs.hexlify(encryptedAmount1.handles[0])}, Proof=${ethersjs.hexlify(encryptedAmount1.inputProof)}`);
-    console.log(`准备向 FHESwap 注入 TokenA: ${initialReserveAmount}, TokenB: ${initialReserveAmount} (加密).`);
+    console.log(`准备向 FHESwap 注入 TokenA: ${ethersjs.formatUnits(initialReserveAmountA, 6)}, TokenB: ${ethersjs.formatUnits(initialReserveAmountB, 6)} (加密).`);
 
     // owner 调用 FHESwap 合约的 mint 函数，提供加密的 TokenA 和 TokenB 作为流动性
     await fHeSwap.connect(owner).mint(
@@ -199,9 +202,9 @@ describe("FHESwap", function () {
       fHeSwapAddress,
       owner // 这里是 owner，因为 reserve0 允许 owner 访问
     );
-    console.log(`解密后 FHESwap reserve0: ${decryptedReserve0} (预期: ${initialReserveAmount})`);
+    console.log(`解密后 FHESwap reserve0: ${ethersjs.formatUnits(decryptedReserve0, 6)} (预期: ${ethersjs.formatUnits(initialReserveAmountA, 6)})`);
     // 断言解密后的 reserve0 等于初始设定的流动性金额
-    expect(decryptedReserve0).to.equal(initialReserveAmount);
+    expect(decryptedReserve0).to.equal(initialReserveAmountA);
 
     // 获取 FHESwap 合约的加密 reserve1
     const encryptedReserve1 = await fHeSwap.getEncryptedReserve1();
@@ -212,9 +215,9 @@ describe("FHESwap", function () {
       fHeSwapAddress,
       owner
     );
-    console.log(`解密后 FHESwap reserve1: ${decryptedReserve1} (预期: ${initialReserveAmount})`);
+    console.log(`解密后 FHESwap reserve1: ${ethersjs.formatUnits(decryptedReserve1, 6)} (预期: ${ethersjs.formatUnits(initialReserveAmountB, 6)})`);
     // 断言解密后的 reserve1 等于初始设定的流动性金额
-    expect(decryptedReserve1).to.equal(initialReserveAmount);
+    expect(decryptedReserve1).to.equal(initialReserveAmountB);
     console.log("--- 初始流动性注入测试通过 ---\n");
   });
 
@@ -226,14 +229,13 @@ describe("FHESwap", function () {
     console.log("--- 测试: 用户交换 TokenA 为 TokenB ---");
     const owner = signers.deployer; // 部署者账户
     const alice = signers.alice;   // 模拟用户账户
-    const swapAmount = 100;        // 交换的 TokenA 数量
-    const initialReserve = 1000;   // 从上一个测试用例继承的初始储备量
-    console.log(`交换金额: ${swapAmount}, 初始储备: ${initialReserve}`);
+    const swapAmount = 0.999;        // 交换的 TokenA 数量
+    console.log(`交换金额: ${swapAmount}, 初始储备: TokenA: ${ethersjs.formatUnits(initialReserveAmountA, 6)}, TokenB: ${ethersjs.formatUnits(initialReserveAmountB, 6)}`);
 
     // 确保 Alice 有足够的 TokenA 进行交换
     console.log("Alice 获取 TokenA:");
     // owner 铸造 swapAmount 的 TokenA 给 Alice
-    const encryptedAliceMintA = await fhevm.createEncryptedInput(tokenAAddress, owner.address).add64(swapAmount).encrypt();
+    const encryptedAliceMintA = await fhevm.createEncryptedInput(tokenAAddress, owner.address).add64(ethersjs.parseUnits(swapAmount.toString(), 6)).encrypt();
     console.log(`创建加密输入 (Alice Mint TokenA): Handle=${ethersjs.hexlify(encryptedAliceMintA.handles[0])}, Proof=${ethersjs.hexlify(encryptedAliceMintA.inputProof)}`);
     await tokenA.connect(owner).mint(alice.address, encryptedAliceMintA.handles[0], encryptedAliceMintA.inputProof);
     console.log(`Owner 铸造 ${swapAmount} TokenA 给 Alice.`);
@@ -254,7 +256,7 @@ describe("FHESwap", function () {
       tokenAAddress,
       alice
     );
-    console.log(`诊断: Alice 的 TokenA 余额 (解密后): ${decryptedAliceTokenA}`);
+    console.log(`诊断: Alice 的 TokenA 余额 (解密后): ${ethersjs.formatUnits(decryptedAliceTokenA, 6)}`);
 
     // Alice 授权 FHESwap 合约作为 TokenA 的操作员
     console.log("Alice 授权 FHESwap 为 TokenA 操作员:");
@@ -266,7 +268,7 @@ describe("FHESwap", function () {
     // 1. Alice 调用 FHESwap 的 getAmountOut 函数获取分子和分母 (链上加密计算)
     console.log("1. Alice 调用 getAmountOut 获取分子分母 (链上加密计算):");
     // 创建加密输入，目标合约为 FHESwap，发起人为 alice，值为 swapAmount (euint64 类型)
-    const encryptedSwapAmountIn = await fhevm.createEncryptedInput(fHeSwapAddress, alice.address).add64(swapAmount).encrypt();
+    const encryptedSwapAmountIn = await fhevm.createEncryptedInput(fHeSwapAddress, alice.address).add64(ethersjs.parseUnits(swapAmount.toString(), 6)).encrypt();
     console.log(`创建加密输入 (Swap AmountIn): Handle=${ethersjs.hexlify(encryptedSwapAmountIn.handles[0])}, Proof=${ethersjs.hexlify(encryptedSwapAmountIn.inputProof)}`);
     // Alice 调用 getAmountOut，传入加密的输入金额和输入代币地址
     await fHeSwap.connect(alice).getAmountOut(
@@ -291,7 +293,7 @@ describe("FHESwap", function () {
       fHeSwapAddress,
       alice
     );
-    console.log(`解密后分子: ${decryptedNumerator}`);
+    console.log(`解密后分子: ${ethersjs.formatUnits(decryptedNumerator, 6)}`);
     // 解密分母
     const decryptedDenominator = await fhevm.userDecryptEuint(
       FhevmType.euint64,
@@ -299,19 +301,19 @@ describe("FHESwap", function () {
       fHeSwapAddress,
       alice
     );
-    console.log(`解密后分母: ${decryptedDenominator}`);
+    console.log(`解密后分母: ${ethersjs.formatUnits(decryptedDenominator, 6)}`);
 
     // 3. Alice 在链下计算期望的输出金额 (明文除法)
     console.log("3. Alice 在链下计算期望输出金额:");
     // 注意：FHEVM 不支持加密除法，因此这一步必须在链下进行
-    const expectedClearAmountOut = Number(decryptedNumerator / decryptedDenominator); // 使用 Math.floor 进行整数除法
-    console.log(`链下计算的期望输出金额 (expectedClearAmountOut): ${expectedClearAmountOut}`);
+    const expectedClearAmountOut = decryptedNumerator / decryptedDenominator;
+    console.log(`链下计算的期望输出金额 (expectedClearAmountOut): ${ethersjs.formatUnits(expectedClearAmountOut, 6)}`);
 
     // 4. Alice 在链下根据滑点计算最小期望输出金额
     console.log("4. Alice 在链下计算最小期望输出金额 (带滑点):");
     const slippageTolerance = 0.01; // 1% 滑点容忍度
-    const minClearAmountOut = Math.floor(expectedClearAmountOut * (1 - slippageTolerance));
-    console.log(`滑点容忍度: ${slippageTolerance * 100}%, 最小期望输出金额 (minClearAmountOut): ${minClearAmountOut}`);
+    const minClearAmountOut = (expectedClearAmountOut * 99n) / 100n;
+    console.log(`滑点容忍度: ${slippageTolerance * 100}%, 最小期望输出金额 (minClearAmountOut): ${ethersjs.formatUnits(minClearAmountOut, 6)}`);
 
     // 5. Alice 重新加密期望输出金额和最小期望输出金额，准备发送到链上
     console.log("5. Alice 重新加密期望输出金额和最小期望输出金额:");
@@ -351,7 +353,7 @@ describe("FHESwap", function () {
       tokenAAddress,
       alice
     );
-    console.log(`Alice 的 TokenA 余额 (解密): ${aliceTokenADecryptedBalance}`);
+    console.log(`Alice 的 TokenA 余额 (解密): ${ethersjs.formatUnits(aliceTokenADecryptedBalance, 6)}`);
 
     // 获取 Alice 的 TokenB 加密余额
     const aliceTokenBEncryptedBalance = await tokenB.confidentialBalanceOf(alice.address);
@@ -363,15 +365,15 @@ describe("FHESwap", function () {
       tokenBAddress,
       alice
     );
-    console.log(`Alice 的 TokenB 余额 (解密): ${aliceTokenBDecryptedBalance}`);
+    console.log(`Alice 的 TokenB 余额 (解密): ${ethersjs.formatUnits(aliceTokenBDecryptedBalance, 6)}`);
 
     // 计算 Alice 期望的最终余额
-    const expectedAliceTokenA = 0; // Alice 交换了所有她最初的 TokenA
+    const expectedAliceTokenA = 0n; // Alice 交换了所有她最初的 TokenA
     // Alice 的 TokenB 余额 = 期望获得的 TokenB 数量 (因为 Alice 初始没有 TokenB)
     const expectedAliceTokenB = expectedClearAmountOut;
 
     // 断言 Alice 的 TokenA 余额为 0
-    expect(aliceTokenADecryptedBalance).to.equal(expectedAliceTokenA);
+    expect(aliceTokenADecryptedBalance).to.equal(0n);
     
     // 断言 Alice 的 TokenB 余额符合预期
     expect(aliceTokenBDecryptedBalance).to.equal(expectedAliceTokenB);
@@ -390,7 +392,7 @@ describe("FHESwap", function () {
       fHeSwapAddress,
       owner // owner 可以解密储备量
     );
-    console.log(`FHESwap reserve0 (解密): ${fHeSwapReserve0Decrypted}`);
+    console.log(`FHESwap reserve0 (解密): ${ethersjs.formatUnits(fHeSwapReserve0Decrypted, 6)}`);
 
     // 获取 FHESwap 的加密 reserve1
     const fHeSwapReserve1Encrypted = await fHeSwap.getEncryptedReserve1();
@@ -402,14 +404,14 @@ describe("FHESwap", function () {
       fHeSwapAddress,
       owner
     );
-    console.log(`FHESwap reserve1 (解密): ${fHeSwapReserve1Decrypted}`);
+    console.log(`FHESwap reserve1 (解密): ${ethersjs.formatUnits(fHeSwapReserve1Decrypted, 6)}`);
 
     // 计算 FHESwap 期望的最终储备量
     // FHESwap 的 reserve0 = 初始储备量 + 交换进来的 TokenA 数量
-    const expectedFHeSwapReserve0 = initialReserve + swapAmount;
+    const expectedFHeSwapReserve0 = initialReserveAmountA + ethersjs.parseUnits(swapAmount.toString(), 6);
    
     // FHESwap 的 reserve1 = 初始储备量 - 交换出去的 TokenB 数量
-    const expectedFHeSwapReserve1 = initialReserve - expectedClearAmountOut;
+    const expectedFHeSwapReserve1 = initialReserveAmountB - expectedClearAmountOut;
 
     // 断言 FHESwap 的 reserve0 符合预期
     expect(fHeSwapReserve0Decrypted).to.equal(expectedFHeSwapReserve0);

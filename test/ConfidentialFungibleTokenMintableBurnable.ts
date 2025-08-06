@@ -70,10 +70,7 @@ describe("ConfidentialFungibleTokenMintableBurnable", function () {
     const owner = signers.deployer;
     const user = signers.alice;
     // 用 owner（deployer）生成 proof
-    const encryptedAmount = await fhevm
-      .createEncryptedInput(contractAddress, owner.address)
-      .add64(clearAmount)
-      .encrypt();
+    const encryptedAmount = await fhevm.createEncryptedInput(contractAddress, owner.address).add32(clearAmount).encrypt();
     // 由 owner 调用 mint，授权给 user
     const tx = await contract
       .connect(owner)
@@ -81,12 +78,7 @@ describe("ConfidentialFungibleTokenMintableBurnable", function () {
     await tx.wait();
     // user 查询并解密余额
     const encryptedBalance = await contract.confidentialBalanceOf(user.address);
-    const clearBalance = await fhevm.userDecryptEuint(
-      FhevmType.euint64,    
-      ethersjs.hexlify(encryptedBalance),
-      contractAddress,
-      user
-    );
+    const clearBalance = await fhevm.userDecryptEuint(FhevmType.euint32, ethersjs.hexlify(encryptedBalance), contractAddress, user);
     expect(clearBalance).to.equal(clearAmount);
   });
 
@@ -150,22 +142,12 @@ describe("ConfidentialFungibleTokenMintableBurnable", function () {
     // 6. 检查余额并打印
     const encryptedBalanceA = await tokenA.confidentialBalanceOf(alice.address);
     console.log("=========== Alice TokenA balance:", encryptedBalanceA)
-    const clearBalanceA = await fhevm.userDecryptEuint(
-      FhevmType.euint64,
-      ethersjs.hexlify(encryptedBalanceA),
-      tokenAAddress,
-      alice
-    );
+    const clearBalanceA = await fhevm.userDecryptEuint(FhevmType.euint32, ethersjs.hexlify(encryptedBalanceA), tokenAAddress, alice);
     console.log("=========== Alice TokenA clearBalanceA:", clearBalanceA)
     const encryptedBalanceB = await tokenB.confidentialBalanceOf(alice.address);
 
     console.log("=========== Alice TokenB encryptedBalanceB:", encryptedBalanceB)
-    const clearBalanceB = await fhevm.userDecryptEuint(
-      FhevmType.euint64,
-      ethersjs.hexlify(encryptedBalanceB),
-      tokenBAddress,
-      alice
-    );
+    const clearBalanceB = await fhevm.userDecryptEuint(FhevmType.euint32, ethersjs.hexlify(encryptedBalanceB), tokenBAddress, alice);
     console.log("=========== Alice TokenB clearBalanceB:", clearBalanceB)
     expect(clearBalanceA).to.equal(mintAmount - swapAmount);
     expect(clearBalanceB).to.equal(mintAmount + swapAmount);

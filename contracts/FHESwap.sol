@@ -181,42 +181,26 @@ contract FHESwap is Ownable, SepoliaConfig {
         // 授予输出代币合约对预期输出金额的瞬态访问权限
         FHE.allowTransient(decryptedExpectedAmountOut, address(tokenOut));
 
-        // --- 链上验证（Uniswap V2 K值验证） ---
-        // 验证公式： (reserveIn + amountInWithFee) * (reserveOut - expectedAmountOut) >= reserveIn * reserveOut
-        // FHE支持加密数据之间的比较操作 (ge, gt, le, lt)。
+        // // --- 链上验证（Uniswap V2 K值验证） ---
+        // // 验证公式： (reserveIn + amountInWithFee) * (reserveOut - expectedAmountOut) >= reserveIn * reserveOut
+        // // FHE支持加密数据之间的比较操作 (ge, gt, le, lt)。
 
-        // 1. 计算带手续费的输入金额 (0.3% fee，即 997/1000)
-        euint64 amountInWithFee = FHE.mul(decryptedAmountIn, 997);
+        // // 1. 计算带手续费的输入金额 (0.3% fee，即 997/1000)
+        // euint64 amountInWithFee = FHE.mul(decryptedAmountIn, 997);
 
-        // 2. 计算左侧： (reserveIn * 1000 + amountInWithFee) * (reserveOut - expectedAmountOut)
-        // 为了保持单位一致性，reserveIn 也要乘以 1000
-        euint64 newReserveInForK = FHE.add(FHE.mul(reserveIn, 1000), amountInWithFee);
-        euint64 newReserveOutForK = reserveOut.sub(decryptedExpectedAmountOut);
+        // // 2. 计算左侧： (reserveIn * 1000 + amountInWithFee) * (reserveOut - expectedAmountOut)
+        // // 为了保持单位一致性，reserveIn 也要乘以 1000
+        // euint64 newReserveInForK = FHE.add(FHE.mul(reserveIn, 1000), amountInWithFee);
+        // euint64 newReserveOutForK = reserveOut.sub(decryptedExpectedAmountOut);
 
-        // 检查 newReserveOutForK 是否可能下溢。如果 expectedAmountOut 过大，可能会导致储备量为负，
-        // 这是一个无效状态。考虑到 Uniswap V2 K值验证本身会捕获无效的 `expectedAmountOut`，
-        // 我们可以依赖后续的 K值验证。
+        // // 检查 newReserveOutForK 是否可能下溢。如果 expectedAmountOut 过大，可能会导致储备量为负，
+        // // 这是一个无效状态。考虑到 Uniswap V2 K值验证本身会捕获无效的 `expectedAmountOut`，
+        // // 我们可以依赖后续的 K值验证。
 
-        euint64 new_k = FHE.mul(newReserveInForK, newReserveOutForK);
+        // euint64 new_k = FHE.mul(newReserveInForK, newReserveOutForK);
 
-        // 3. 计算右侧： reserveIn * 1000 * reserveOut (旧的K值，同样保持单位一致性)
-        euint64 old_k = FHE.mul(FHE.mul(reserveIn, 1000), reserveOut);
-
-        // NOTE: ！！！！重要安全警告！！！！
-        // 当前 FHEVM 库版本（或您的 Hardhat 配置）不支持直接在链上对加密布尔值进行断言，以触发回滚。
-        // 例如 FHE.eq 返回 ebool，但 require 仅接受 bool。
-        // 像 FHE.assertEqual 或 FHE.verify 这样的函数在您的环境中似乎也不可用。
-        // 因此，以下 K 值验证和滑点验证无法实现硬性回滚。这意味着合约将信任用户链下计算的正确性。
-        // 在生产环境中，强烈建议确保 FHEVM 库提供支持 ebool 断言的机制来保证安全性，否则存在重大风险。
-        // 请联系 FHEVM 团队或查阅最新文档，了解如何在链上对加密值进行可靠的断言。
-
-        // K 值验证
-        // ebool eqResult = FHE.eq(new_k, old_k);
-        // bool isEqual = FHE.verify(eqResult); // 如果 FHE.verify 不可用，这会报错
-        // require(isEqual, "FHESWAP: K_VALIDATION_FAILED");
-
-        // 滑点验证
-        // require(FHE.eq(decryptedExpectedAmountOut, decryptedMinAmountOut), "FHESWAP: SLIPPAGE_TOO_HIGH");
+        // // 3. 计算右侧： reserveIn * 1000 * reserveOut (旧的K值，同样保持单位一致性)
+        // euint64 old_k = FHE.mul(FHE.mul(reserveIn, 1000), reserveOut);
 
         // 从 msg.sender 转移输入代币到本合约
         tokenIn.confidentialTransferFrom(msg.sender, address(this), decryptedAmountIn);

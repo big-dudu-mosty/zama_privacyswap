@@ -36,5 +36,5 @@ export type { IERC20 } from "./@openzeppelin/contracts/token/ERC20/IERC20";
 export { IERC20__factory } from "./factories/@openzeppelin/contracts/token/ERC20/IERC20__factory";
 export type { ConfidentialFungibleTokenMintableBurnable } from "./contracts/ConfidentialFungibleTokenMintableBurnable";
 export { ConfidentialFungibleTokenMintableBurnable__factory } from "./factories/contracts/ConfidentialFungibleTokenMintableBurnable__factory";
-export type { FHESwap } from "./contracts/FHESwap";
-export { FHESwap__factory } from "./factories/contracts/FHESwap__factory";
+export type { FHESwap } from "./contracts/FHESwap.sol/FHESwap";
+export { FHESwap__factory } from "./factories/contracts/FHESwap.sol/FHESwap__factory";

@@ -71,25 +71,29 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
         euint64 decryptedAmount0 = FHE.fromExternal(amount0, amount0Proof);
         euint64 decryptedAmount1 = FHE.fromExternal(amount1, amount1Proof);
 
-        // 授予代币合约对这些金额的瞬态访问权限
-        FHE.allowTransient(decryptedAmount0, address(token0));
-        FHE.allowTransient(decryptedAmount1, address(token1));
-        FHE.allowTransient(decryptedAmount0, address(this));
-        FHE.allowTransient(decryptedAmount1, address(this));
-
-        // 允许合约本身访问这些金额
+        // 先授予合约本身访问权，再授予瞬时权限，避免顺序导致的 ACL 拒绝
         FHE.allowThis(decryptedAmount0);
         FHE.allowThis(decryptedAmount1);
+
+        // 授予本合约与代币合约对这些金额的瞬时访问权限
+        FHE.allowTransient(decryptedAmount0, address(this));
+        FHE.allowTransient(decryptedAmount1, address(this));
+        FHE.allowTransient(decryptedAmount0, address(token0));
+        FHE.allowTransient(decryptedAmount1, address(token1));
         
-        // 授予对现有状态变量的瞬态访问权限
+        // 授予对现有状态变量的瞬态访问权限（按自身->瞬时的顺序）
         if (FHE.isInitialized(_totalSupply)) {
+            FHE.allowThis(_totalSupply);
             FHE.allowTransient(_totalSupply, address(this));
         }
         if (FHE.isInitialized(_reserve0)) {
+            FHE.allowThis(_reserve0);
+            FHE.allowThis(_reserve1);
             FHE.allowTransient(_reserve0, address(this));
             FHE.allowTransient(_reserve1, address(this));
         }
         if (FHE.isInitialized(_balances[msg.sender])) {
+            FHE.allowThis(_balances[msg.sender]);
             FHE.allowTransient(_balances[msg.sender], address(this));
         }
 
@@ -130,6 +134,11 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
         FHE.allowThis(_reserve1);
         FHE.allowThis(_totalSupply);
         FHE.allowThis(_balances[msg.sender]);
+        // 也允许合约临时访问这些更新后的状态，以兼容后续链上操作
+        FHE.allowTransient(_reserve0, address(this));
+        FHE.allowTransient(_reserve1, address(this));
+        FHE.allowTransient(_totalSupply, address(this));
+        FHE.allowTransient(_balances[msg.sender], address(this));
         FHE.allowThis(liquidity);
         
         FHE.allow(_reserve0, msg.sender);
@@ -215,9 +224,11 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
 
         euint64 encryptedAmountIn = FHE.fromExternal(amountIn, amountInProof);
         
-        // 授予必要的瞬态访问权限
+        // 先允许自身，再授予瞬态访问权限，确保 ACL 顺序一致
         FHE.allowThis(encryptedAmountIn);
         FHE.allowTransient(encryptedAmountIn, address(this));
+        FHE.allowThis(_reserve0);
+        FHE.allowThis(_reserve1);
         FHE.allowTransient(_reserve0, address(this));
         FHE.allowTransient(_reserve1, address(this));
 
@@ -266,10 +277,11 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
         require(FHE.isInitialized(_reserve1), "Reserve1 not set for swap");
 
         euint64 decryptedAmountIn = FHE.fromExternal(amountIn, amountInProof);
+        // 先允许合约自身访问，再授予相关合约瞬时访问，避免 ACL 顺序问题
         FHE.allowThis(decryptedAmountIn);
+        FHE.allowTransient(decryptedAmountIn, address(this));
         FHE.allowTransient(decryptedAmountIn, address(token0));
         FHE.allowTransient(decryptedAmountIn, address(token1));
-        FHE.allowTransient(decryptedAmountIn, address(this));
         
         euint64 decryptedExpectedAmountOut = FHE.fromExternal(expectedAmountOut, expectedAmountOutProof);
         euint64 decryptedMinAmountOut = FHE.fromExternal(minAmountOut, minAmountOutProof);
@@ -280,6 +292,8 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
         FHE.allowTransient(decryptedMinAmountOut, address(this));
         
         // 授予对储备量的瞬态访问权限
+        FHE.allowThis(_reserve0);
+        FHE.allowThis(_reserve1);
         FHE.allowTransient(_reserve0, address(this));
         FHE.allowTransient(_reserve1, address(this));
 

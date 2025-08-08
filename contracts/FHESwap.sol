@@ -152,7 +152,7 @@ contract FHESwap is Ownable, SepoliaConfig {
         require(FHE.isInitialized(_reserve1), "Reserve1 not set for swap");
 
         // 将外部加密输入转换为内部加密值
-        euint64 decryptedAmountIn = FHE.fromExternal(amountIn, amountInProof);
+        euint64 decryptedAmountIn = FHE.fromExternal(amountIn, amountInProof); 
         // 授予输入代币合约对该金额的瞬态访问权限
         FHE.allowTransient(decryptedAmountIn, address(token0));
         FHE.allowTransient(decryptedAmountIn, address(token1));

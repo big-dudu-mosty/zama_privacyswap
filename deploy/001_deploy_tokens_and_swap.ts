@@ -38,15 +38,16 @@ const deployTokensAndSwap: DeployFunction = async function (hre: HardhatRuntimeE
   });
   console.log(`✅ TokenB 部署地址: ${tokenBDeployment.address}\n`);
 
-  // 部署 FHESwap
-  console.log("🚀 部署 FHESwap...");
+  // 部署 FHESwapSimple
+  console.log("🚀 部署 FHESwapSimple...");
   const fheSwapDeployment = await deploy("FHESwap", {
+    contract: "FHESwapSimple",
     from: deployer,
     args: [tokenADeployment.address, tokenBDeployment.address, deployer],
     log: true,
     waitConfirmations: hre.network.name === "sepolia" ? 2 : 1,
   });
-  console.log(`✅ FHESwap 部署地址: ${fheSwapDeployment.address}\n`);
+  console.log(`✅ FHESwapSimple 部署地址: ${fheSwapDeployment.address}\n`);
 
   // 如果是在测试网络上，初始化协处理器
   if (hre.network.name === "sepolia") {
@@ -55,12 +56,12 @@ const deployTokensAndSwap: DeployFunction = async function (hre: HardhatRuntimeE
       // 连接到已部署的合约
       const tokenA = await ethers.getContractAt("ConfidentialFungibleTokenMintableBurnable", tokenADeployment.address);
       const tokenB = await ethers.getContractAt("ConfidentialFungibleTokenMintableBurnable", tokenBDeployment.address);
-      const fheSwap = await ethers.getContractAt("FHESwap", fheSwapDeployment.address);
+      const fheSwap = await ethers.getContractAt("FHESwapSimple", fheSwapDeployment.address);
 
       // 初始化协处理器
       await hre.fhevm.assertCoprocessorInitialized(tokenA, "ConfidentialFungibleTokenMintableBurnable");
       await hre.fhevm.assertCoprocessorInitialized(tokenB, "ConfidentialFungibleTokenMintableBurnable");
-      await hre.fhevm.assertCoprocessorInitialized(fheSwap, "FHESwap");
+      await hre.fhevm.assertCoprocessorInitialized(fheSwap, "FHESwapSimple");
       console.log("✅ FHEVM 协处理器初始化完成\n");
     } catch (error) {
       console.log("⚠️  协处理器初始化警告:", error);

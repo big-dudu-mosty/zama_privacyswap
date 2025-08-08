@@ -205,6 +205,24 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
     console.log(`⛽ Gas使用: ${addLiquidityReceipt?.gasUsed}`);
     console.log(`🧾 区块号: ${addLiquidityReceipt?.blockNumber}`);
 
+    // 3.1 严格验证储备量（由 deployer 解密；首次添加应与投入量相等）
+    const reserve0AfterAddEnc = await retryOperation(() => fHeSwap.getEncryptedReserve0());
+    const reserve1AfterAddEnc = await retryOperation(() => fHeSwap.getEncryptedReserve1());
+    const reserve0AfterAdd = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0AfterAddEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1AfterAdd = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1AfterAddEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    expect(reserve0AfterAdd).to.equal(liquidityAmountA);
+    expect(reserve1AfterAdd).to.equal(liquidityAmountB);
+
     // 4. 验证LP代币余额
     console.log("\n🎫 第4步: 验证LP代币分配");
     const aliceLPBalance = await retryOperation(() => fHeSwap.getEncryptedLPBalance(alice.address));
@@ -223,33 +241,6 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
       console.log(`💎 Alice LP代币数量: ${ethers.formatUnits(decryptedLPBalance, 6)}`);
     } catch (error) {
       console.log("⚠️ LP代币解密失败，但分配成功");
-    }
-
-    // 5. 验证储备量
-    console.log("\n🏦 第5步: 验证储备量");
-    const reserve0 = await retryOperation(() => fHeSwap.getEncryptedReserve0());
-    const reserve1 = await retryOperation(() => fHeSwap.getEncryptedReserve1());
-    
-    console.log(`🔒 Reserve0句柄: ${ethers.hexlify(reserve0)}`);
-    console.log(`🔒 Reserve1句柄: ${ethers.hexlify(reserve1)}`);
-
-    try {
-      const decryptedReserve0 = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        ethers.hexlify(reserve0),
-        fHeSwapAddress,
-        alice
-      );
-      const decryptedReserve1 = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        ethers.hexlify(reserve1),
-        fHeSwapAddress,
-        alice
-      );
-      console.log(`🏦 TokenA储备: ${ethers.formatUnits(decryptedReserve0, 6)}`);
-      console.log(`🏦 TokenB储备: ${ethers.formatUnits(decryptedReserve1, 6)}`);
-    } catch (error) {
-      console.log("⚠️ 储备量解密失败，但更新成功");
     }
 
     expect(aliceLPBalance).to.not.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
@@ -286,6 +277,22 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
     const mintBTx = await retryOperation(() => tokenB.connect(deployer).mint(bob.address, encryptedMintB.handles[0], encryptedMintB.inputProof));
     console.log(`📤 Bob TokenB铸造: ${mintBTx.hash}`);
 
+    // 记录添加前储备（deployer 解密）
+    const reserve0BeforeBobEnc = await retryOperation(() => fHeSwap.getEncryptedReserve0());
+    const reserve1BeforeBobEnc = await retryOperation(() => fHeSwap.getEncryptedReserve1());
+    const reserve0BeforeBob = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0BeforeBobEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1BeforeBob = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1BeforeBobEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+
     // 设置操作员权限
     const operatorExpiry = Math.floor(Date.now() / 1000) + 3600;
     const setOpATx = await retryOperation(() => tokenA.connect(bob).setOperator(fHeSwapAddress, operatorExpiry));
@@ -321,6 +328,24 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
     const receipt = await retryOperation(() => addLiquidityTx.wait());
     console.log(`📤 Bob添加流动性: ${addLiquidityTx.hash}`);
     console.log(`⛽ Gas使用: ${receipt?.gasUsed}`);
+
+    // 严格验证储备差值
+    const reserve0AfterBobEnc = await retryOperation(() => fHeSwap.getEncryptedReserve0());
+    const reserve1AfterBobEnc = await retryOperation(() => fHeSwap.getEncryptedReserve1());
+    const reserve0AfterBob = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0AfterBobEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1AfterBob = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1AfterBobEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    expect(reserve0AfterBob - reserve0BeforeBob).to.equal(bobAmountA);
+    expect(reserve1AfterBob - reserve1BeforeBob).to.equal(bobAmountB);
 
     // 验证Bob的LP代币
     const bobLPBalance = await retryOperation(() => fHeSwap.getEncryptedLPBalance(bob.address));
@@ -411,6 +436,22 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
       throw new Error("无法计算交换输出，解密失败");
     }
 
+    // 3.1 严格验证储备差值（报价后尚未变更储备；在 swap 前记录基线）
+    const reserve0BeforeSwapEnc = await retryOperation(() => fHeSwap.getEncryptedReserve0());
+    const reserve1BeforeSwapEnc = await retryOperation(() => fHeSwap.getEncryptedReserve1());
+    const reserve0BeforeSwap = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0BeforeSwapEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1BeforeSwap = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1BeforeSwapEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+
     // 4. 执行交换
     console.log("\n🔄 第4步: 执行交换");
     // swap 之前再次授权，避免在估算与执行之间句柄变化
@@ -440,6 +481,24 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
     console.log(`📤 交换执行交易: ${swapTx.hash}`);
     console.log(`⛽ Gas使用: ${swapReceipt?.gasUsed}`);
     console.log(`🧾 区块号: ${swapReceipt?.blockNumber}`);
+
+    // 4.1 严格验证储备差值（交换后）
+    const reserve0AfterSwapEnc = await retryOperation(() => fHeSwap.getEncryptedReserve0());
+    const reserve1AfterSwapEnc = await retryOperation(() => fHeSwap.getEncryptedReserve1());
+    const reserve0AfterSwap = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0AfterSwapEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1AfterSwap = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1AfterSwapEnc),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    expect(reserve0AfterSwap - reserve0BeforeSwap).to.equal(swapAmount);
+    expect(reserve1BeforeSwap - reserve1AfterSwap).to.equal(expectedOut);
 
     // 5. 验证交换后余额
     console.log("\n💰 第5步: 验证交换结果");
@@ -484,7 +543,7 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
     console.log(`👤 用户: ${alice.address}`);
     console.log(`📉 准备移除LP代币: ${ethers.formatUnits(liquidityToRemove, 6)}`);
 
-    // 1. 查看移除前状态
+    // 1. 查看移除前状态（用于后续严格比较）
     console.log("\n📊 第1步: 移除前状态查询");
     const lpBalanceBefore = await retryOperation(() => fHeSwap.getEncryptedLPBalance(alice.address));
     const reserve0Before = await retryOperation(() => fHeSwap.getEncryptedReserve0());
@@ -520,38 +579,35 @@ describe("FHESwapSimple 详细测试 - Sepolia测试网", function () {
     console.log(`🔒 移除后Reserve1句柄: ${ethers.hexlify(reserve1After)}`);
     console.log(`🔒 移除后总供应句柄: ${ethers.hexlify(totalSupplyAfter)}`);
 
-    try {
-      const decryptedLPAfter = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        ethers.hexlify(lpBalanceAfter),
-        fHeSwapAddress,
-        alice
-      );
-      
-      const decryptedReserve0After = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        ethers.hexlify(reserve0After),
-        fHeSwapAddress,
-        alice
-      );
-      
-      const decryptedReserve1After = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        ethers.hexlify(reserve1After),
-        fHeSwapAddress,
-        alice
-      );
-      
-      console.log(`📉 移除后LP余额: ${ethers.formatUnits(decryptedLPAfter, 6)}`);
-      console.log(`🏦 移除后TokenA储备: ${ethers.formatUnits(decryptedReserve0After, 6)}`);
-      console.log(`🏦 移除后TokenB储备: ${ethers.formatUnits(decryptedReserve1After, 6)}`);
-      
-      console.log(`📊 LP代币变化: -${ethers.formatUnits(liquidityToRemove, 6)}`);
-    } catch (error) {
-      console.log("⚠️ 状态解密失败，但移除操作成功");
-    }
+    // 3.1 严格解密对比（由 deployer 解密储备）
+    const reserve0BeforeDec = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0Before),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1BeforeDec = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1Before),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve0AfterDec = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve0After),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    const reserve1AfterDec = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      ethers.hexlify(reserve1After),
+      fHeSwapAddress,
+      signers.deployer
+    );
+    expect(reserve0BeforeDec - reserve0AfterDec).to.equal(liquidityToRemove);
+    expect(reserve1BeforeDec - reserve1AfterDec).to.equal(liquidityToRemove);
 
-    // 4. 验证Alice收到的代币
+    // 4. 验证Alice收到的代币（若解密失败不阻断，因为储备已严格断言）
     console.log("\n💰 第4步: 验证返还代币");
     const aliceTokenABalance = await tokenA.confidentialBalanceOf(alice.address);
     const aliceTokenBBalance = await tokenB.confidentialBalanceOf(alice.address);

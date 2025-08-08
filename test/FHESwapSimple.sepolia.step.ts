@@ -173,7 +173,7 @@ describe("FHESwapSimple 分步测试 - Sepolia", function () {
     await retryOperation("Bob authorizeSelf B wait", async () => authTokenBTx.wait());
     console.log(`🔑 TokenB余额授权: ${authTokenBTx.hash}`);
 
-    // 4. 添加流动性
+    // 4. 添加流动性（首次添加前储备未初始化，避免解密未初始化句柄）
     console.log("\n💧 执行添加流动性...");
     const encryptedAmount0 = await fhevm.createEncryptedInput(fHeSwapAddress, bob.address).add64(bobAmountA).encrypt();
     const encryptedAmount1 = await fhevm.createEncryptedInput(fHeSwapAddress, bob.address).add64(bobAmountB).encrypt();
@@ -190,7 +190,31 @@ describe("FHESwapSimple 分步测试 - Sepolia", function () {
     console.log(`⛽ Gas使用: ${receipt?.gasUsed}`);
     console.log(`🧾 区块号: ${receipt?.blockNumber}`);
 
-    // 5. 验证LP代币
+    // 5. 验证储备金数值正确（deployer 解密）
+    const reserve0AfterAddEnc = await fHeSwap.getEncryptedReserve0();
+    const reserve1AfterAddEnc = await fHeSwap.getEncryptedReserve1();
+    const reserve0AfterAdd = await retryOperation("decrypt reserve0 after add", async () =>
+      fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        ethers.hexlify(reserve0AfterAddEnc),
+        fHeSwapAddress,
+        signers.deployer
+      )
+    );
+    const reserve1AfterAdd = await retryOperation("decrypt reserve1 after add", async () =>
+      fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        ethers.hexlify(reserve1AfterAddEnc),
+        fHeSwapAddress,
+        signers.deployer
+      )
+    );
+
+    // 首次添加应等于注入量
+    expect(reserve0AfterAdd).to.equal(bobAmountA);
+    expect(reserve1AfterAdd).to.equal(bobAmountB);
+
+    // 6. 验证LP代币（尝试由 bob 解密，失败不影响用储备金的强断言）
     const bobLPBalance = await fHeSwap.getEncryptedLPBalance(bob.address);
     const totalSupply = await fHeSwap.getEncryptedTotalSupply();
     
@@ -254,12 +278,28 @@ describe("FHESwapSimple 分步测试 - Sepolia", function () {
     await retryOperation("Alice authorizeSelf A wait", async () => authAliceTokenATx.wait());
     console.log(`🔑 Alice TokenA余额授权: ${authAliceTokenATx.hash}`);
 
-    // 5. 获取交换前储备金
+    // 5. 获取交换前储备金（由 deployer 解密）
     console.log("\n📊 获取交换前储备金...");
-    const reserve0Before = await fHeSwap.getEncryptedReserve0();
-    const reserve1Before = await fHeSwap.getEncryptedReserve1();
-    console.log(`🔒 交换前Reserve0句柄: ${ethers.hexlify(reserve0Before)}`);
-    console.log(`🔒 交换前Reserve1句柄: ${ethers.hexlify(reserve1Before)}`);
+    const reserve0BeforeEnc = await fHeSwap.getEncryptedReserve0();
+    const reserve1BeforeEnc = await fHeSwap.getEncryptedReserve1();
+    console.log(`🔒 交换前Reserve0句柄: ${ethers.hexlify(reserve0BeforeEnc)}`);
+    console.log(`🔒 交换前Reserve1句柄: ${ethers.hexlify(reserve1BeforeEnc)}`);
+    const reserve0Before = await retryOperation("decrypt reserve0 before swap", async () =>
+      fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        ethers.hexlify(reserve0BeforeEnc),
+        fHeSwapAddress,
+        signers.deployer
+      )
+    );
+    const reserve1Before = await retryOperation("decrypt reserve1 before swap", async () =>
+      fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        ethers.hexlify(reserve1BeforeEnc),
+        fHeSwapAddress,
+        signers.deployer
+      )
+    );
 
     // 6. 获取交换估算
     console.log("\n📊 获取交换估算...");
@@ -270,6 +310,7 @@ describe("FHESwapSimple 分步测试 - Sepolia", function () {
       tokenAAddress
     ));
     console.log(`📤 价格查询: ${getAmountOutTx.hash}`);
+    await retryOperation("getAmountOut wait", async () => getAmountOutTx.wait());
 
     // 7. 计算预期输出
     const numerator = await fHeSwap.connect(alice).getEncryptedNumerator();
@@ -277,34 +318,31 @@ describe("FHESwapSimple 分步测试 - Sepolia", function () {
     
     let expectedOut: bigint;
     let minOut: bigint;
-    let actualOut: bigint;
-    
-    try {
-      const decryptedNumerator = await fhevm.userDecryptEuint(
+
+    const decryptedNumerator = await retryOperation("decrypt numerator", async () =>
+      fhevm.userDecryptEuint(
         FhevmType.euint64,
         ethers.hexlify(numerator),
         fHeSwapAddress,
         alice
-      );
-      
-      const decryptedDenominator = await fhevm.userDecryptEuint(
+      )
+    );
+
+    const decryptedDenominator = await retryOperation("decrypt denominator", async () =>
+      fhevm.userDecryptEuint(
         FhevmType.euint64,
         ethers.hexlify(denominator),
         fHeSwapAddress,
         alice
-      );
-      
-      expectedOut = decryptedNumerator / decryptedDenominator;
-      minOut = (expectedOut * 99n) / 100n; // 1% 滑点
-      
-      console.log(`🧮 期望输出: ${ethers.formatUnits(expectedOut, 6)} TokenB`);
-      console.log(`📉 最小输出(1%滑点): ${ethers.formatUnits(minOut, 6)} TokenB`);
-      console.log(`📊 滑点保护: ${ethers.formatUnits(expectedOut - minOut, 6)} TokenB`);
-    } catch (error) {
-      console.log("⚠️ 价格解密失败，使用估算值");
-      expectedOut = ethers.parseUnits("2.5", 6);
-      minOut = ethers.parseUnits("2.4", 6);
-    }
+      )
+    );
+
+    expectedOut = decryptedNumerator / decryptedDenominator;
+    minOut = (expectedOut * 99n) / 100n; // 1% 滑点
+
+    console.log(`🧮 期望输出: ${ethers.formatUnits(expectedOut, 6)} TokenB`);
+    console.log(`📉 最小输出(1%滑点): ${ethers.formatUnits(minOut, 6)} TokenB`);
+    console.log(`📊 滑点保护: ${ethers.formatUnits(expectedOut - minOut, 6)} TokenB`);
 
     // 8. 执行交换
     console.log("\n🔄 执行交换...");
@@ -327,14 +365,34 @@ describe("FHESwapSimple 分步测试 - Sepolia", function () {
     console.log(`⛽ Gas使用: ${swapReceipt?.gasUsed}`);
     console.log(`🧾 区块号: ${swapReceipt?.blockNumber}`);
 
-    // 9. 获取交换后储备金
+    // 9. 获取交换后储备金（由 deployer 解密）
     console.log("\n📊 获取交换后储备金...");
-    const reserve0After = await fHeSwap.getEncryptedReserve0();
-    const reserve1After = await fHeSwap.getEncryptedReserve1();
-    console.log(`🔒 交换后Reserve0句柄: ${ethers.hexlify(reserve0After)}`);
-    console.log(`🔒 交换后Reserve1句柄: ${ethers.hexlify(reserve1After)}`);
+    const reserve0AfterEnc = await fHeSwap.getEncryptedReserve0();
+    const reserve1AfterEnc = await fHeSwap.getEncryptedReserve1();
+    console.log(`🔒 交换后Reserve0句柄: ${ethers.hexlify(reserve0AfterEnc)}`);
+    console.log(`🔒 交换后Reserve1句柄: ${ethers.hexlify(reserve1AfterEnc)}`);
+    const reserve0After = await retryOperation("decrypt reserve0 after swap", async () =>
+      fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        ethers.hexlify(reserve0AfterEnc),
+        fHeSwapAddress,
+        signers.deployer
+      )
+    );
+    const reserve1After = await retryOperation("decrypt reserve1 after swap", async () =>
+      fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        ethers.hexlify(reserve1AfterEnc),
+        fHeSwapAddress,
+        signers.deployer
+      )
+    );
 
-    // 10. 验证交换后余额
+    // 对储备变动做强断言：TokenA 储备 +swapAmount，TokenB 储备 -expectedOut
+    expect(reserve0After - reserve0Before).to.equal(swapAmount);
+    expect(reserve1Before - reserve1After).to.equal(expectedOut);
+
+    // 10. 验证交换后余额（若用户余额解密失败，不阻断测试，因为储备已严格断言）
     console.log("\n💰 验证交换结果...");
     const aliceTokenABalanceAfter = await tokenA.confidentialBalanceOf(alice.address);
     const aliceTokenBBalanceAfter = await tokenB.confidentialBalanceOf(alice.address);

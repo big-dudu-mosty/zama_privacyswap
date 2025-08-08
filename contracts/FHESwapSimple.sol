@@ -145,6 +145,9 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
         FHE.allow(_reserve1, msg.sender);
         FHE.allow(_balances[msg.sender], msg.sender);
         FHE.allow(liquidity, msg.sender);
+        // 允许 owner 解密储备，便于链下校验
+        FHE.allow(_reserve0, owner());
+        FHE.allow(_reserve1, owner());
 
         emit LiquidityAdded(msg.sender, 0, 0); // 为了隐私，不显示实际金额
 
@@ -209,6 +212,13 @@ contract FHESwapSimple is Ownable, SepoliaConfig {
         FHE.allowThis(amount1);
         FHE.allow(amount0, msg.sender);
         FHE.allow(amount1, msg.sender);
+        // 同步允许合约与 owner 访问更新后的储备，便于链下验证
+        FHE.allowThis(_reserve0);
+        FHE.allowThis(_reserve1);
+        FHE.allow(_reserve0, msg.sender);
+        FHE.allow(_reserve1, msg.sender);
+        FHE.allow(_reserve0, owner());
+        FHE.allow(_reserve1, owner());
 
         emit LiquidityRemoved(msg.sender, 0, 0);
         

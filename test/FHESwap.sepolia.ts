@@ -1,4 +1,4 @@
-import { FHESwap, ConfidentialFungibleTokenMintableBurnable } from "../types";
+import { FHESwapSimple, ConfidentialFungibleTokenMintableBurnable } from "../types";
 import { FhevmType } from "@fhevm/hardhat-plugin";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
@@ -25,13 +25,38 @@ type Signers = {
 describe("FHESwap on Sepolia", function () {
   this.timeout(600000); // 增加 Mocha 测试超时时间到10分钟
   
+  // 简单重试工具（指数退避）
+  async function retryOperation<T>(
+    label: string,
+    operation: () => Promise<T>,
+    maxRetries: number = 5,
+    delayMs: number = 2500
+  ): Promise<T> {
+    let lastErr: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (err: any) {
+        lastErr = err;
+        const message = String(err?.message || err);
+        const transient = /ECONNRESET|timeout|ECONNREFUSED|ETIMEDOUT|5\d\d|Relayer|gateway timeout/i.test(message);
+        console.log(`⚠️ [${label}] 失败(第${attempt}/${maxRetries}次): ${message}`);
+        if (!transient || attempt === maxRetries) break;
+        const wait = Math.floor(delayMs * Math.pow(1.5, attempt - 1));
+        console.log(`⏳ [${label}] ${wait}ms 后重试...`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+    throw lastErr;
+  }
+
   // 定义测试中使用的签名者和合约实例变量
   let signers: Signers;
   let tokenA: ConfidentialFungibleTokenMintableBurnable;
   let tokenB: ConfidentialFungibleTokenMintableBurnable;
   let tokenAAddress: string;
   let tokenBAddress: string;
-  let fHeSwap: FHESwap;
+  let fHeSwap: FHESwapSimple;
   let fHeSwapAddress: string;
   let initialReserveAmountA: bigint;
   let initialReserveAmountB: bigint;
@@ -93,9 +118,9 @@ describe("FHESwap on Sepolia", function () {
       const fHeSwapDeployment = await deployments.get("FHESwap");
       fHeSwapAddress = fHeSwapDeployment.address;
       fHeSwap = (await ethers.getContractAt(
-        "FHESwap",
+        "FHESwapSimple",
         fHeSwapAddress
-      )) as FHESwap;
+      )) as FHESwapSimple;
       console.log(`✅ 连接到 FHESwap: ${fHeSwapAddress}`);
     } catch (error) {
       console.error("❌ 无法连接到已部署的合约:", error);
@@ -153,8 +178,8 @@ describe("FHESwap on Sepolia", function () {
   /**
    * @dev 测试所有者（deployer）是否能够成功铸造初始流动性到 FHESwap 合约。
    */
-  it("should allow owner to mint initial liquidity on Sepolia", async function () {
-    console.log("--- 测试: 所有者在 Sepolia 上铸造初始流动性 ---");
+  it("should allow owner to add initial liquidity on Sepolia", async function () {
+    console.log("--- 测试: 所有者在 Sepolia 上添加初始流动性 ---");
     const owner = signers.deployer;
     
     // 使用较小的金额以节省测试网 gas
@@ -202,30 +227,38 @@ describe("FHESwap on Sepolia", function () {
     console.log("2. Owner approves FHESwap as operator:");
     const operatorExpiry = Math.floor(Date.now() / 1000) + 3600; // 1小时后过期
     
-    await tokenA.connect(owner).setOperator(fHeSwapAddress, operatorExpiry);
+    const setOpATx = await tokenA.connect(owner).setOperator(fHeSwapAddress, operatorExpiry);
+    await setOpATx.wait();
     console.log(`✅ Owner 授权 FHESwap 为 TokenA 操作员`);
     
-    await tokenB.connect(owner).setOperator(fHeSwapAddress, operatorExpiry);
+    const setOpBTx = await tokenB.connect(owner).setOperator(fHeSwapAddress, operatorExpiry);
+    await setOpBTx.wait();
     console.log(`✅ Owner 授权 FHESwap 为 TokenB 操作员`);
 
     // 4. 所有者向 FHESwap 合约提供流动性
-    console.log("3. Owner provides liquidity to FHESwap:");
+    console.log("3. Owner provides liquidity to FHESwapSimple:");
     
     const encryptedAmount0 = await fhevm.createEncryptedInput(fHeSwapAddress, owner.address).add64(initialReserveAmountA).encrypt();
     const encryptedAmount1 = await fhevm.createEncryptedInput(fHeSwapAddress, owner.address).add64(initialReserveAmountB).encrypt();
     console.log(`准备向 FHESwap 注入流动性...`);
 
-    const mintTx = await fHeSwap.connect(owner).mint(
-      encryptedAmount0.handles[0],
-      encryptedAmount0.inputProof,
-      encryptedAmount1.handles[0],
-      encryptedAmount1.inputProof
+    const mintTx = await retryOperation("FHESwapSimple.addLiquidity send", async () =>
+      fHeSwap.connect(owner).addLiquidity(
+        encryptedAmount0.handles[0],
+        encryptedAmount0.inputProof,
+        encryptedAmount1.handles[0],
+        encryptedAmount1.inputProof,
+        {
+          // 避免 provider 估算气时偶发失败
+          gasLimit: 1_900_000
+        }
+      )
     );
-    const mintTxReceipt = await mintTx.wait();
-    console.log(`✅ FHESwap.mint 调用完成. Gas 使用: ${mintTxReceipt?.gasUsed}`);
+    const mintTxReceipt = await retryOperation("FHESwapSimple.addLiquidity wait", async () => mintTx.wait());
+    console.log(`✅ FHESwapSimple.addLiquidity 调用完成. Gas 使用: ${mintTxReceipt?.gasUsed}`);
 
     // 5. 验证 FHESwap 合约内部的储备量
-    console.log("验证 FHESwap 储备量:");
+    console.log("验证 FHESwapSimple 储备量:");
     
     const encryptedReserve0 = await fHeSwap.getEncryptedReserve0();
     const encryptedReserve1 = await fHeSwap.getEncryptedReserve1();
@@ -292,15 +325,17 @@ describe("FHESwap on Sepolia", function () {
     await tokenA.connect(alice).setOperator(fHeSwapAddress, operatorExpiry);
     console.log("✅ Alice 授权 FHESwap 为操作员");
 
-    // Alice 调用 getAmountOut
+    // Alice 调用 getAmountOut（等待上链后再读取分子分母）
     console.log("1. Alice 调用 getAmountOut:");
     const encryptedSwapAmountIn = await fhevm.createEncryptedInput(fHeSwapAddress, alice.address).add64(aliceMintAmount).encrypt();
-    
-    await fHeSwap.connect(alice).getAmountOut(
-      encryptedSwapAmountIn.handles[0],
-      encryptedSwapAmountIn.inputProof,
-      tokenAAddress
+    const getAmountOutTx = await retryOperation("getAmountOut send", async () =>
+      fHeSwap.connect(alice).getAmountOut(
+        encryptedSwapAmountIn.handles[0],
+        encryptedSwapAmountIn.inputProof,
+        tokenAAddress
+      )
     );
+    await retryOperation("getAmountOut wait", async () => getAmountOutTx.wait());
     console.log("✅ getAmountOut 调用完成");
 
     // 获取分子分母

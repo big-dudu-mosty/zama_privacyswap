@@ -3,6 +3,15 @@
 ## 概述
 本项目包含多个测试文件，用于测试基于FHEVM的机密代币交换合约。每个测试文件针对不同的测试环境和功能进行设计。
 
+运行命令：
+npm run compile
+npm run deploy:sepolia
+HARDHAT_MAX_WORKERS=$(nproc) npx hardhat test --bail --no-compile test/FHESwapSimple.sepolia.step.ts --network sepolia
+
+强制重新部署:
+npx hardhat deploy --network sepolia --reset  
+
+
 ## 测试文件详细说明
 
 ### 1. `FHESwapSimple.test.ts` - 本地简化版测试

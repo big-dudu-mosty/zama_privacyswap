@@ -55,14 +55,22 @@ contract FHESwap is Ownable, SepoliaConfig {
         euint64 decryptedAmount0 = FHE.fromExternal(amount0, amount0Proof);
         euint64 decryptedAmount1 = FHE.fromExternal(amount1, amount1Proof);
 
-        // 授予代币合约对这些金额的瞬态访问权限
-        // 这对于代币合约执行内部操作（如减法）至关重要
+        // 先允许合约自身访问，再授予瞬时权限，避免 ACL 顺序问题
+        FHE.allowThis(decryptedAmount0);
+        FHE.allowThis(decryptedAmount1);
+        // 授予本合约与代币合约对这些金额的瞬时访问权限
+        FHE.allowTransient(decryptedAmount0, address(this));
+        FHE.allowTransient(decryptedAmount1, address(this));
         FHE.allowTransient(decryptedAmount0, address(token0));
         FHE.allowTransient(decryptedAmount1, address(token1));
 
-        // 允许 FHESwap 合约对这些传入的加密金额进行操作
-        FHE.allowThis(decryptedAmount0);
-        FHE.allowThis(decryptedAmount1);
+        // 若已有储备，先授予对现有储备的访问与瞬时权限
+        if (FHE.isInitialized(_reserve0)) {
+            FHE.allowThis(_reserve0);
+            FHE.allowThis(_reserve1);
+            FHE.allowTransient(_reserve0, address(this));
+            FHE.allowTransient(_reserve1, address(this));
+        }
 
         // 从 msg.sender 转移代币到本合约作为储备
         token0.confidentialTransferFrom(msg.sender, address(this), decryptedAmount0);
